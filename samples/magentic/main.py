@@ -15,15 +15,15 @@ Requirements:
 - Environment variables loaded from .env file
 - Azure CLI authentication configured
 """
-
+import os
 import asyncio
 import logging
+from datetime import datetime
 
+import pytz
 from dotenv import load_dotenv
 from agent_framework import (
     ChatAgent,
-    ChatMessage,
-    HostedCodeInterpreterTool,
     MagenticAgentDeltaEvent,
     MagenticAgentMessageEvent,
     MagenticBuilder,
@@ -31,8 +31,10 @@ from agent_framework import (
     MagenticOrchestratorMessageEvent,
     WorkflowEvent,
 )
-from agent_framework.azure import AzureOpenAIChatClient, AzureOpenAIResponsesClient 
-from azure.identity import AzureCliCredential
+
+from agent_framework.openai import OpenAIChatClient
+
+from openai import AsyncOpenAI
 
 # Configure logging to debug level for detailed workflow tracking
 logging.basicConfig(level=logging.DEBUG)
@@ -44,46 +46,201 @@ load_dotenv()
 logger.info("Environment variables loaded successfully")
 
 
-async def run_magentic_workflow() -> None:
-    """Run a Magentic multi-agent workflow for energy efficiency analysis.
-    
-    This function demonstrates a complete Magentic workflow that:
-    1. Creates specialized agents (Researcher and Coder)
-    2. Configures a workflow manager to orchestrate agent collaboration
-    3. Executes a complex task requiring both research and computation
-    4. Streams real-time events showing workflow progress
-    
-    The workflow analyzes energy efficiency of ML model architectures,
-    requiring both information gathering (research) and quantitative
-    analysis (code execution).
-    
-    Raises:
-        Exception: If workflow execution fails due to API errors,
-                   authentication issues, or agent execution problems.
+if os.environ.get("GITHUB_TOKEN") is not None:
+    token = os.environ["GITHUB_TOKEN"]
+    endpoint = "https://models.github.ai/inference"
+    model_name = "gpt-4.1-mini"
+    print("Using GitHub Token for authentication")
+elif os.environ.get("AZURE_OPENAI_API_KEY") is not None:
+    token = os.environ["AZURE_OPENAI_API_KEY"]
+    endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
+    model_name = os.environ["COMPLETION_DEPLOYMENT_NAME"]
+    print("Using Azure OpenAI Token for authentication")
+
+async_openai_client = AsyncOpenAI(
+    base_url=endpoint,
+    api_key=token
+)
+
+openai_client = OpenAIChatClient(
+    model_id=model_name,
+    api_key=token,
+    async_client=async_openai_client,
+)
+
+async def get_weather(city: str) -> str:
+    """Gets a statement about the current weather in the given city."""
+    print("executing get_weather")
+    return f"The weather in {city} is 73 degrees and Sunny."
+
+
+async def get_medical_history(username: str) -> str:
+    """Get the medical history for a given username with allergies and restrictions."""
+    print("executing get_medical_history")
+    return f"{username} has an allergy to peanuts and eggs."
+
+
+async def get_available_ingredients(location: str) -> str:
+    """Get the available ingredients and their prices for a given location.
+
+    The response MUST clearly list each ingredient with a price in euros,
+    for example: "eggs (2.50€)", "milk (1.80€)", etc., so other agents
+    can reason about cost.
     """
-    
-    # Create the ResearcherAgent: specializes in finding and gathering information
-    # This agent works better with gpt-4o-search-preview model capabilities for web searches
-    researcher_agent = ChatAgent(
-        name="ResearcherAgent",
-        description="Specialist in research and information gathering",
-        instructions=(
-            "You are a Researcher. You find information without additional computation or quantitative analysis."
-        ),
-        # Azure OpenAI client with CLI-based authentication
-        chat_client=AzureOpenAIChatClient(credential=AzureCliCredential()),
+    print("executing get_available_ingredients")
+    return (
+        f"Available ingredients in {location} with typical prices are: "
+        f"eggs (2.50€), milk (1.80€), bread (3.00€), peanuts (4.00€), beer (2.00€), "
+        f"wine (8.00€), salmon (12.00€), spinach (2.20€), oil (3.50€) and butter (2.70€)."
     )
 
-    # Create the CoderAgent: specializes in writing and executing code
-    # This agent can perform computations, data analysis, and generate visualizations
-    coder_agent = ChatAgent(
-        name="CoderAgent",
-        description="A helpful assistant that writes and executes code to process and analyze data.",
-        instructions="You solve questions using code. Please provide detailed analysis and computation process.",
-        # Azure OpenAI Responses client for chat completion
-        chat_client=AzureOpenAIResponsesClient(credential=AzureCliCredential()),
-        # HostedCodeInterpreterTool enables secure Python code execution in a sandbox
-        tools=HostedCodeInterpreterTool(),
+
+def get_current_username() -> str:
+    """Get the username of the current user."""
+    print("executing get_current_username")
+    return "Dennis"
+
+
+def get_current_location_of_user(username: str) -> str:
+    """Get the current timezone location of the user for a given username."""
+    print("executing get_current_location")
+    print(username)
+    if "Dennis" in username:
+        return "Europe/Berlin"
+    return "America/New_York"
+
+
+def get_current_time(location: str) -> str:
+    """Get the current time in the given location using pytz."""
+    try:
+        print("get current time for location:", location)
+        timezone = pytz.timezone(location)
+        now = datetime.now(timezone)
+        current_time = now.strftime("%I:%M:%S %p")
+        return current_time
+    except Exception as exc:  # pragma: no cover - defensive
+        print("Error:", exc)
+        return "Sorry, I couldn't find the timezone for that location."
+
+
+def get_budget_limit(username: str) -> str:
+    """Return a random food budget limit in euros between 20 and 50.
+
+    Other agents should treat this value as a hard upper limit when
+    proposing meals or shopping lists.
+    """
+    import random
+
+    print("executing get_budget_limit")
+    limit = random.randint(20, 50)
+    return f"The user's total food budget is {limit}€ (hard limit)."
+
+
+def get_user_preferences(username: str) -> str:
+    """Return randomized user food preferences and constraints.
+
+    The response MUST always specify all of the following explicitly so
+    other agents can reason about them:
+
+    - Whether the user wants to eat now or later
+    - Whether the user prefers delivery to a concrete address or dining in
+    - Whether spending must stay within the budget or can exceed it
+    """
+    import random
+
+    print("executing get_user_preferences")
+
+    eat_timing = random.choice(["eat now", "eat later"])
+    location_mode = random.choice([
+        "delivery to the home address",
+        "delivery to the office address",
+        "dine in at a nearby restaurant",
+    ])
+    budget_policy = random.choice([
+        "must strictly stay within the budget limit",
+        "can exceed the budget limit if the meal is exceptional",
+    ])
+
+    return (
+        f"For user {username}, preferences are: wants to {eat_timing}, "
+        f"prefers {location_mode}, and {budget_policy}."
+    )
+
+
+async def run_magentic_workflow() -> None:
+    """Run a Magentic multi-agent workflow mirroring the Autogen example.
+
+    Agents:
+        - users_agent: knows username and medical history
+        - location_agent: knows the user's physical location
+        - time_agent: knows local time for a location
+        - chef_agent: recommends meals based on time, location, ingredients
+    """
+
+    users_agent = ChatAgent(
+        name="users_agent",
+        description=(
+            "Assistant focused on user-specific information: identity, "
+            "medical history, allergies, food budget constraints and "
+            "general dining preferences."
+        ),
+        instructions=(
+            "You are responsible ONLY for user-specific context. "
+            "Use your tools to find the current username, the user's "
+            "medical history (including allergies and restrictions), a "
+            "random but realistic budget limit between 20€ and 50€, and "
+            "clear dining preferences (eat now or later, delivery address "
+            "vs. dine in, and whether the user must stay within budget or "
+            "is allowed to go above it). "
+            "Do not make meal recommendations or reason about ingredients "
+            "directly; instead, provide clear, concise facts that other "
+            "agents can rely on. Always explicitly mention allergens, the "
+            "exact budget number in euros, and all dining preferences when "
+            "asked about them."
+        ),
+        chat_client=openai_client,
+        tools=[
+            get_current_username,
+            get_medical_history,
+            get_budget_limit,
+            get_user_preferences,
+        ],
+    )
+
+    manager_agent = ChatAgent(
+        name="manager_agent",
+        description=(
+            "Assistant that manages contextual information about the user's "
+            "location and current local time."
+        ),
+        instructions=(
+            "You are responsible ONLY for resolving the user's physical "
+            "location and the current local time at that location. "
+            "Use your tools to first determine the location from the "
+            "username when necessary, and then compute an accurate current "
+            "time string for that location. Do NOT suggest meals, reason "
+            "about ingredients, or discuss allergies or budget. Instead, "
+            "return short factual statements like 'The user is in X' or "
+            "'The local time in X is Y'."
+        ),
+        chat_client=openai_client,
+        tools=[get_current_location_of_user, get_current_time],
+    )
+
+    chef_agent = ChatAgent(
+        name="chef_agent",
+        description=(
+            "A helpful assistant that can suggest meals and dishes for the right "
+            "time of the day, location, available ingredients, user preferences "
+            "and allergies."
+        ),
+        instructions=(
+            "Recommend dishes for the right time of the day, location, available "
+            "ingredients and user preferences. Always ask for food preferences "
+            "and allergies. Never suggest a dish until allergies are clarified."
+        ),
+        chat_client=openai_client,
+        tools=[get_available_ingredients, get_weather],
     )
     
     # State variables for managing streaming display output
@@ -93,23 +250,7 @@ async def run_magentic_workflow() -> None:
 
     # Unified callback for all workflow events
     def on_event(event: WorkflowEvent) -> None:
-        """Process and display events emitted by the Magentic workflow.
-        
-        This callback handles multiple event types to provide real-time visibility
-        into workflow execution:
-        
-        - MagenticOrchestratorMessageEvent: Messages from the workflow manager
-        - MagenticAgentDeltaEvent: Streaming token-by-token agent responses
-        - MagenticAgentMessageEvent: Complete agent messages
-        - MagenticFinalResultEvent: Final workflow result
-        
-        Args:
-            event: A workflow event of any supported type.
-        
-        Note:
-            This function modifies nonlocal variables to track streaming state
-            and provide continuous output formatting.
-        """
+        """Process and display events emitted by the Magentic workflow."""
         nonlocal last_stream_agent_id, stream_line_open
         
         # Handle orchestrator messages (workflow coordination events)
@@ -118,6 +259,10 @@ async def run_magentic_workflow() -> None:
             
         # Handle streaming delta events (token-by-token agent responses)
         elif isinstance(event, MagenticAgentDeltaEvent):
+            # Ignore empty or non-text deltas to avoid printing "None"
+            if not isinstance(event.text, str) or not event.text:
+                return
+
             # Start a new stream line if agent changed or no stream is currently open
             if last_stream_agent_id != event.agent_id or not stream_line_open:
                 if stream_line_open:
@@ -155,35 +300,25 @@ async def run_magentic_workflow() -> None:
     print("\n---------------------------------------------------------------------")
     print("\nBuilding Magentic Workflow...")
     print("\n---------------------------------------------------------------------")
-    
+
     # Build the Magentic workflow using the builder pattern
     workflow = (
         MagenticBuilder()
-        # Register the agents as participants in the workflow
-        .participants(researcher=researcher_agent, coder=coder_agent)
-        # Configure the standard manager to orchestrate agent collaboration
-        .with_standard_manager(
-            chat_client=AzureOpenAIChatClient(credential=AzureCliCredential()),
-            max_round_count=6,  # Maximum conversation rounds before timeout
-            max_stall_count=2,   # Max rounds without progress before intervention
-            max_reset_count=1,   # Max times workflow can be reset on failure
+        .participants(
+            users=users_agent,
+            manager=manager_agent,
+            chef=chef_agent,
         )
-        # Build the final workflow instance
+        .with_standard_manager(
+            chat_client=openai_client,
+            max_round_count=20,
+            max_stall_count=4,
+            max_reset_count=1,
+        )
         .build()
     )
-    
-    # Define the complex task that requires both research and computation
-    # This task demonstrates the need for multi-agent collaboration:
-    # - Researcher: Gathers information about ML models, datasets, and energy metrics
-    # - Coder: Performs calculations, creates tables, and generates recommendations
-    task = (
-        "I am preparing a report on the energy efficiency of different machine learning model architectures. "
-        "Compare the estimated training and inference energy consumption of ResNet-50, BERT-base, and GPT-2 "
-        "on standard datasets (e.g., ImageNet for ResNet, GLUE for BERT, WebText for GPT-2). "
-        "Then, estimate the CO2 emissions associated with each, assuming training on an Azure Standard_NC6s_v3 "
-        "VM for 24 hours. Provide lists for clarity, and recommend the most energy-efficient model "
-        "per task type (image classification, text classification, and text generation)."
-    ) 
+
+    task = "I want to have something to eat. What would you recommend for me for now?"
 
     print(f"\nTask: {task}")
     print("\nStarting workflow execution...")

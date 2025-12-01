@@ -32,9 +32,8 @@ from agent_framework import (
     Role,
 )
 from dotenv import load_dotenv
-
-from agent_framework.azure import AzureOpenAIChatClient
-from azure.identity import DefaultAzureCredential
+from openai import AsyncOpenAI
+from agent_framework.openai import OpenAIChatClient
 from pydantic import BaseModel
 
 
@@ -112,23 +111,27 @@ elif (os.environ.get("AZURE_OPENAI_API_KEY") is not None):
 
 
 
-
 if not endpoint or not model_name:
     raise ValueError("Set AZURE_OPENAI_ENDPOINT and COMPLETION_DEPLOYMENT_NAME")
 
-chat_client = AzureOpenAIChatClient(
-    deployment_name=model_name,
-    endpoint=endpoint,
+async_openai_client = AsyncOpenAI(
+    base_url=endpoint,
     api_key=token
 )
 
-intent_agent = chat_client.create_agent(
+openai_client=OpenAIChatClient(
+    model_id = model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+intent_agent = openai_client.create_agent(
     instructions=INTENT_PROMPT,
     response_format=IntentResult,
     name="intent_extractor"
 )
 
-response_agent = chat_client.create_agent(
+response_agent = openai_client.create_agent(
     instructions=RESPONSE_PROMPT,
     response_format=ResponseResult,
     name="response_generator"
@@ -204,14 +207,31 @@ async def main():
     if len(sys.argv) < 2:
         print('Usage: python src/minimal_workflow.py "message"')
         sys.exit(1)
+
+    message = sys.argv[1]
+
+    resources_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.realpath("__file__"))),
+        "resources",
+        message
+    )
+    print(f"Loading message from: {resources_path}")
+
+    if os.path.exists(resources_path):
+        with open(resources_path, encoding="utf-8") as f:
+            message = f.read()
+        print(f"✅ Loaded email from {resources_path}")
+    else:
+        print(f"⚠️  Resource not found at {resources_path}, using input message directly.")
+
     
     print(f"\n{'='*60}")
     print(f"MINIMAL CUSTOMER SUPPORT WORKFLOW")
     print(f"{'='*60}")
-    print(f"Message: {sys.argv[1]}")
+    print(f"Message: {message}")
     print(f"{'='*60}")
     
-    await workflow.run(sys.argv[1])
+    await workflow.run(message)
 
 
 if __name__ == "__main__":
