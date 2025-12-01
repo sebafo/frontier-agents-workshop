@@ -101,37 +101,46 @@ load_dotenv()
 if (os.environ.get("GITHUB_TOKEN") is not None):
     token = os.environ["GITHUB_TOKEN"]
     endpoint = "https://models.github.ai/inference"
-    model_name = f"openai/gpt-5-nano"
     print("Using GitHub Token for authentication")
 elif (os.environ.get("AZURE_OPENAI_API_KEY") is not None):
     token = os.environ["AZURE_OPENAI_API_KEY"]
     endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
-    model_name = os.environ["COMPLETION_DEPLOYMENT_NAME"]
     print("Using Azure OpenAI Token for authentication")
-
-
-
-if not endpoint or not model_name:
-    raise ValueError("Set AZURE_OPENAI_ENDPOINT and COMPLETION_DEPLOYMENT_NAME")
 
 async_openai_client = AsyncOpenAI(
     base_url=endpoint,
     api_key=token
 )
 
-openai_client=OpenAIChatClient(
-    model_id = model_name,
+completion_model_name = os.environ.get("COMPLETION_DEPLOYMENT_NAME")
+medium_model_name = os.environ.get("MEDIUM_DEPLOYMENT_MODEL_NAME")
+small_model_name = os.environ.get("SMALL_DEPLOYMENT_MODEL_NAME")
+
+completion_client=OpenAIChatClient(
+    model_id = completion_model_name,
     api_key=token,
     async_client = async_openai_client
 )
 
-intent_agent = openai_client.create_agent(
+medium_client=OpenAIChatClient(
+    model_id = medium_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+small_client=OpenAIChatClient(
+    model_id = small_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+intent_agent = completion_client.create_agent(
     instructions=INTENT_PROMPT,
     response_format=IntentResult,
     name="intent_extractor"
 )
 
-response_agent = openai_client.create_agent(
+response_agent = medium_client.create_agent(
     instructions=RESPONSE_PROMPT,
     response_format=ResponseResult,
     name="response_generator"

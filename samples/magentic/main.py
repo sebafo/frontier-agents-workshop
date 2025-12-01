@@ -46,15 +46,13 @@ load_dotenv()
 logger.info("Environment variables loaded successfully")
 
 
-if os.environ.get("GITHUB_TOKEN") is not None:
+if (os.environ.get("GITHUB_TOKEN") is not None):
     token = os.environ["GITHUB_TOKEN"]
     endpoint = "https://models.github.ai/inference"
-    model_name = "gpt-4.1-mini"
     print("Using GitHub Token for authentication")
-elif os.environ.get("AZURE_OPENAI_API_KEY") is not None:
+elif (os.environ.get("AZURE_OPENAI_API_KEY") is not None):
     token = os.environ["AZURE_OPENAI_API_KEY"]
     endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
-    model_name = os.environ["COMPLETION_DEPLOYMENT_NAME"]
     print("Using Azure OpenAI Token for authentication")
 
 async_openai_client = AsyncOpenAI(
@@ -62,10 +60,26 @@ async_openai_client = AsyncOpenAI(
     api_key=token
 )
 
-openai_client = OpenAIChatClient(
-    model_id=model_name,
+completion_model_name = os.environ.get("COMPLETION_DEPLOYMENT_NAME")
+medium_model_name = os.environ.get("MEDIUM_DEPLOYMENT_MODEL_NAME")
+small_model_name = os.environ.get("SMALL_DEPLOYMENT_MODEL_NAME")
+
+completion_client=OpenAIChatClient(
+    model_id = completion_model_name,
     api_key=token,
-    async_client=async_openai_client,
+    async_client = async_openai_client
+)
+
+medium_client=OpenAIChatClient(
+    model_id = medium_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+small_client=OpenAIChatClient(
+    model_id = small_model_name,
+    api_key=token,
+    async_client = async_openai_client
 )
 
 async def get_weather(city: str) -> str:
@@ -198,7 +212,7 @@ async def run_magentic_workflow() -> None:
             "exact budget number in euros, and all dining preferences when "
             "asked about them."
         ),
-        chat_client=openai_client,
+        chat_client=small_client,
         tools=[
             get_current_username,
             get_medical_history,
@@ -223,7 +237,7 @@ async def run_magentic_workflow() -> None:
             "return short factual statements like 'The user is in X' or "
             "'The local time in X is Y'."
         ),
-        chat_client=openai_client,
+        chat_client=medium_client,
         tools=[get_current_location_of_user, get_current_time],
     )
 
@@ -239,7 +253,7 @@ async def run_magentic_workflow() -> None:
             "ingredients and user preferences. Always ask for food preferences "
             "and allergies. Never suggest a dish until allergies are clarified."
         ),
-        chat_client=openai_client,
+        chat_client=small_client,
         tools=[get_available_ingredients, get_weather],
     )
     
@@ -310,7 +324,7 @@ async def run_magentic_workflow() -> None:
             chef=chef_agent,
         )
         .with_standard_manager(
-            chat_client=openai_client,
+            chat_client=completion_client,
             max_round_count=20,
             max_stall_count=4,
             max_reset_count=1,

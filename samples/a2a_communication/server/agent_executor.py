@@ -38,7 +38,7 @@ def _create_openai_client() -> OpenAIChatClient:
     if os.environ.get("GITHUB_TOKEN") is not None:
         token = os.environ["GITHUB_TOKEN"]
         endpoint = "https://models.github.ai/inference"
-        model_name = "openai/gpt-5-nano"
+        model_name = os.environ["COMPLETION_DEPLOYMENT_NAME"]
     elif os.environ.get("AZURE_OPENAI_API_KEY") is not None:
         token = os.environ["AZURE_OPENAI_API_KEY"]
         endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]

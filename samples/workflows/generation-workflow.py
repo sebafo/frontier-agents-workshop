@@ -31,12 +31,10 @@ load_dotenv()
 if (os.environ.get("GITHUB_TOKEN") is not None):
     token = os.environ["GITHUB_TOKEN"]
     endpoint = "https://models.github.ai/inference"
-    model_name = f"openai/gpt-5-nano"
     print("Using GitHub Token for authentication")
 elif (os.environ.get("AZURE_OPENAI_API_KEY") is not None):
     token = os.environ["AZURE_OPENAI_API_KEY"]
     endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
-    model_name = os.environ["COMPLETION_DEPLOYMENT_NAME"]
     print("Using Azure OpenAI Token for authentication")
 
 async_openai_client = AsyncOpenAI(
@@ -44,8 +42,24 @@ async_openai_client = AsyncOpenAI(
     api_key=token
 )
 
-openai_client=OpenAIChatClient(
-    model_id = model_name,
+completion_model_name = os.environ.get("COMPLETION_DEPLOYMENT_NAME")
+medium_model_name = os.environ.get("MEDIUM_DEPLOYMENT_MODEL_NAME")
+small_model_name = os.environ.get("SMALL_DEPLOYMENT_MODEL_NAME")
+
+completion_client=OpenAIChatClient(
+    model_id = completion_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+medium_client=OpenAIChatClient(
+    model_id = medium_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+small_client=OpenAIChatClient(
+    model_id = small_model_name,
     api_key=token,
     async_client = async_openai_client
 )
@@ -86,11 +100,8 @@ def is_approved(message: Any) -> bool:
         return True
 
 
-# Create Azure OpenAI chat client
-chat_client = openai_client
-
 # Create Writer agent - generates content
-writer = chat_client.create_agent(
+writer = small_client.create_agent(
     name="Writer",
     instructions=(
         "You are an excellent content writer. "
@@ -100,7 +111,7 @@ writer = chat_client.create_agent(
 )
 
 # Create Reviewer agent - evaluates and provides structured feedback
-reviewer = chat_client.create_agent(
+reviewer = medium_client.create_agent(
     name="Reviewer",
     instructions=(
         "You are an expert content reviewer. "
@@ -118,7 +129,7 @@ reviewer = chat_client.create_agent(
 )
 
 # Create Editor agent - improves content based on feedback
-editor = chat_client.create_agent(
+editor = completion_client.create_agent(
     name="Editor",
     instructions=(
         "You are a skilled editor. "
@@ -129,7 +140,7 @@ editor = chat_client.create_agent(
 )
 
 # Create Publisher agent - formats content for publication
-publisher = chat_client.create_agent(
+publisher = small_client.create_agent(
     name="Publisher",
     instructions=(
         "You are a publishing agent. "
@@ -139,7 +150,7 @@ publisher = chat_client.create_agent(
 )
 
 # Create Summarizer agent - creates final publication report
-summarizer = chat_client.create_agent(
+summarizer = small_client.create_agent(
     name="Summarizer",
     instructions=(
         "You are a summarizer agent. "

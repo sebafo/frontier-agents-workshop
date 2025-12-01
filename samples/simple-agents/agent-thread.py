@@ -25,12 +25,10 @@ conversation threads and message history preservation across interactions.
 if (os.environ.get("GITHUB_TOKEN") is not None):
     token = os.environ["GITHUB_TOKEN"]
     endpoint = "https://models.github.ai/inference"
-    model_name = f"openai/gpt-5-nano"
     print("Using GitHub Token for authentication")
 elif (os.environ.get("AZURE_OPENAI_API_KEY") is not None):
     token = os.environ["AZURE_OPENAI_API_KEY"]
     endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
-    model_name = os.environ["COMPLETION_DEPLOYMENT_NAME"]
     print("Using Azure OpenAI Token for authentication")
 
 async_openai_client = AsyncOpenAI(
@@ -38,8 +36,24 @@ async_openai_client = AsyncOpenAI(
     api_key=token
 )
 
-openai_client=OpenAIChatClient(
-    model_id = model_name,
+completion_model_name = os.environ.get("COMPLETION_DEPLOYMENT_NAME")
+medium_model_name = os.environ.get("MEDIUM_DEPLOYMENT_MODEL_NAME")
+small_model_name = os.environ.get("SMALL_DEPLOYMENT_MODEL_NAME")
+
+completion_client=OpenAIChatClient(
+    model_id = completion_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+medium_client=OpenAIChatClient(
+    model_id = medium_model_name,
+    api_key=token,
+    async_client = async_openai_client
+)
+
+small_client=OpenAIChatClient(
+    model_id = small_model_name,
     api_key=token,
     async_client = async_openai_client
 )
@@ -58,7 +72,7 @@ async def example_with_automatic_thread_creation() -> None:
     print("=== Automatic Thread Creation Example ===")
 
     agent = ChatAgent(
-        chat_client=openai_client,
+        chat_client=completion_client,
         instructions="You are a helpful weather agent.",
         tools=get_weather,
     )
@@ -83,7 +97,7 @@ async def example_with_thread_persistence() -> None:
     print("Using the same thread across multiple conversations to maintain context.\n")
 
     agent = ChatAgent(
-        chat_client=openai_client,
+        chat_client=medium_client,
         instructions="You are a helpful weather agent.",
         tools=get_weather,
     )
@@ -116,7 +130,7 @@ async def example_with_existing_thread_messages() -> None:
     print("=== Existing Thread Messages Example ===")
 
     agent = ChatAgent(
-        chat_client=openai_client,
+        chat_client=small_client,
         instructions="You are a helpful weather agent.",
         tools=get_weather,
     )
@@ -138,7 +152,7 @@ async def example_with_existing_thread_messages() -> None:
 
     # Create a new agent instance but use the existing thread with its message history
     new_agent = ChatAgent(
-        chat_client=openai_client,
+        chat_client=small_client,
         instructions="You are a helpful weather agent.",
         tools=get_weather,
     )
