@@ -304,12 +304,12 @@ async def run_handoff_workflow() -> None:
     # The coordinator (triage_agent) can hand off to specialists
     # Specialists can then hand off to compliance_agent
     workflow = (
-        HandoffBuilder(
-            name="customer_support_handoff",
-            participants=[triage_agent, billing_agent, shipping_agent, compliance_agent],
-        )
-        .set_coordinator("triage_agent")
-        .with_interaction_mode("autonomous")  # Run without human intervention
+        HandoffBuilder(name="customer_support_handoff")
+        .participants([triage_agent, billing_agent, shipping_agent, compliance_agent])
+        .with_start_agent(triage_agent)  # Start with triage agent
+        .add_handoff(billing_agent, [compliance_agent])  # Billing can hand off to compliance
+        .add_handoff(shipping_agent, [compliance_agent])  # Shipping can hand off to compliance
+        .with_autonomous_mode()  # Run without human intervention
         .build()
     )
 
