@@ -25,8 +25,8 @@ mcp = FastMCP("UserTimeLocation")
 streamable_http_app = mcp.http_app(path="/mcp", transport="streamable-http")
 
 users = {
-    "Dennis": {
-        "name": "Dennis",
+    "Sebastian": {
+        "name": "Sebastian",
         "location": "Europe/Berlin",
     },
     "John": {
@@ -46,7 +46,7 @@ def get_version() -> dict:
 async def get_current_user() -> str:
     """Get the username of the current user."""
     logger.info("Tool called: get_current_user")
-    result = "Dennis"
+    result = "Sebastian"
     logger.info(f"Tool completed: get_current_user | result={result}")
     return result
 
