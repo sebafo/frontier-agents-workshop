@@ -227,36 +227,26 @@ WEATHER_MCP_URL = os.environ.get("WEATHER_MCP_URL", "http://localhost:8001/mcp")
 #     prevents hallucinated weather or time data.
 #   • We give it a friendly but concise personality.
 AGENT_INSTRUCTIONS = """
-You are a friendly assistant for time and weather queries.
+You are a friendly, concise assistant for time and weather queries.
 
-LOCATION MEMORY:
-- You remember the user's location from the conversation history.
-  When the user says "I am in London", remember "London" / "Europe/London".
-  When they say "I moved to Berlin", update to "Berlin" / "Europe/Berlin".
-  You do NOT need to call any tool to remember this — the conversation
-  history IS your memory.
-- Do NOT ask the user to repeat their location if they already told you.
+TOOLS YOU HAVE:
+- get_current_time_for_location(location) — returns the current local time
+  for an IANA timezone (e.g. "Europe/London", "Europe/Berlin").
+- get_weather_at_location(location) — returns weather for a city name.
+- list_supported_locations() — lists cities supported for weather.
+- move(user, newlocation) — updates the user's stored location.
+- get_current_user() — returns the logged-in username.
+- get_current_location(user) — returns the user's stored location.
 
-ANSWERING QUESTIONS:
-- For time queries: call get_current_time_for_location with the IANA
-  timezone (e.g. "Europe/London") from what the user already told you.
-- For weather queries: call get_weather_at_location with the city name
-  the user mentioned.
+BEHAVIOUR:
+- Remember the user's location from conversation history. Do NOT ask
+  the user to repeat their location if they already told you.
+- When the user says they moved to a new city, call the move() tool
+  to persist the change.
 - Always use tools for real data — never make up times or weather.
 - When reporting weather, include the local time too.
 - If a location is not supported for weather, call
-  list_supported_locations to tell the user which ones are available.
-- Be concise and friendly.
-
-CRITICAL — INTERPRETING TOOL RESULTS:
-- Tool results are ALWAYS successful when they return data.
-- Results may be wrapped in JSON like [{"type":"text","text":"..."}].
-  The actual value is in the "text" field. Treat this as a SUCCESS.
-- For example, if get_weather_at_location returns
-  [{"type":"text","text":"Weather for London: Cool and clear"}],
-  that means the weather IS "Cool and clear". Report it to the user.
-- NEVER say "there was an error" or "I had trouble" when a tool
-  returned data. If you received text back from a tool, it worked.
+  list_supported_locations and tell the user which ones are available.
 """
 
 
@@ -499,15 +489,74 @@ async def interactive_mode() -> None:
 
 
 # =============================================================================
-# 7. ENTRY POINT
+# 7. DEV UI MODE (OPTIONAL)
+# =============================================================================
+# Launch the agent inside the Agent Framework Dev UI, a browser-based
+# interface that lets you chat with the agent and inspect activities,
+# metrics, and traces interactively.
+#
+# Install once:  pip install agent-framework-devui
+# Run:           python solution.py --devui
+def devui_mode() -> None:
+    """
+    Serve the agent through the Agent Framework Dev UI.
+
+    The Dev UI provides:
+      - A chat interface to interact with the agent
+      - Activity and trace inspection for debugging tool calls
+      - Metrics for latency and token usage
+    """
+    import logging
+    from agent_framework.devui import serve
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logger = logging.getLogger(__name__)
+
+    tools = [
+        get_current_time_for_location,
+        MCPStreamableHTTPTool(name="User Server", url=USER_MCP_URL),
+        MCPStreamableHTTPTool(name="Weather Server", url=WEATHER_MCP_URL),
+    ]
+
+    agent = ChatAgent(
+        chat_client=completion_client,
+        name="TimeWeatherAgent",
+        instructions=AGENT_INSTRUCTIONS,
+        tools=tools,
+    )
+
+    logger.info("Starting Time & Weather Agent in Dev UI")
+    logger.info("Available at: http://localhost:8094")
+    logger.info("Press Ctrl+C to stop.")
+
+    serve(entities=[agent], port=8094, auto_open=True, instrumentation_enabled=True)
+
+
+# =============================================================================
+# 8. ENTRY POINT
 # =============================================================================
 # When this script is executed directly, we run the scripted test queries.
-# To use interactive mode instead, change `main()` to `interactive_mode()`.
+# Pass --devui to launch in the browser-based Dev UI instead.
+# Pass --interactive for free-form interactive chat in the terminal.
 if __name__ == "__main__":
-    # ── Choose which mode to run ────────────────────────────────────────
-    # Uncomment the line you want:
-    #   asyncio.run(main())              # Scripted test queries
-    # asyncio.run(interactive_mode())  # Free-form interactive chat
+    import argparse
 
-    # Default: run the scripted test queries that match the scenario spec.
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Scenario 1 – Time & Weather Agent")
+    parser.add_argument(
+        "--devui",
+        action="store_true",
+        help="Launch the agent in the Agent Framework Dev UI (browser-based)",
+    )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Run in interactive terminal chat mode",
+    )
+    args = parser.parse_args()
+
+    if args.devui:
+        devui_mode()
+    elif args.interactive:
+        asyncio.run(interactive_mode())
+    else:
+        asyncio.run(main())
