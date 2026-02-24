@@ -52,7 +52,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from dotenv import load_dotenv
 
 # ── Microsoft Agent Framework imports ───────────────────────────────────────
-from agent_framework import ChatAgent, MCPStreamableHTTPTool
+from agent_framework import ChatAgent, tool, MCPStreamableHTTPTool
 
 # ── AG-UI integration ──────────────────────────────────────────────────────
 # add_agent_framework_fastapi_endpoint wires a ChatAgent into a FastAPI app
